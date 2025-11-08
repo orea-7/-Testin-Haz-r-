@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bakalım ne kadar veterinersin?</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root{ --purple:#7C3AED; --bg:#f7f7fb; }
+  html,body{height:100%;margin:0;background:var(--bg);font-family:'Baloo 2', system-ui, Segoe UI, Roboto, Arial;}
+  .app{max-width:980px;margin:0 auto;padding:24px;}
+  .card{position:relative;background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.06);padding:20px;overflow:hidden}
+  .btn{background:rgba(124,58,237,.12);color:var(--purple);border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer}
+  .btn:hover{filter:brightness(.95)}
+  .title{font-size:36px;font-weight:800;text-align:center;
+    background:linear-gradient(90deg,#7C3AED,#6366F1,#3B82F6);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    margin:0 0 6px;
+  }
+  .subtitle{text-align:center;color:#6b7280;font-size:18px;margin:0 0 14px;}
+  .stage{position:relative;height:520px;border:1px dashed rgba(0,0,0,.08);border-radius:16px;margin-top:14px;background:linear-gradient(180deg,#fff,#fafaff);overflow:hidden}
+  .hud{display:flex;gap:12px;align-items:center;margin-top:12px}
+  .ring{position:absolute;width:76px;height:76px;border-radius:999px;left:-9999px;top:-9999px;border:6px solid rgba(0,0,0,.12);box-sizing:border-box; z-index:5;}
+  .ring.progress{border-image: conic-gradient(#10b981 var(--p,0%), #e5e7eb 0) 1;}
+  .drag{position:absolute;font-size:56px;user-select:none;cursor:grab;transform:translate(-50%,-50%); z-index:4; touch-action:none;}
+  .drag:active{cursor:grabbing}
+  .cat{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:420px;height:auto;filter: drop-shadow(0 8px 24px rgba(0,0,0,.08)); z-index:1; pointer-events:none;}
+  .hotspot{position:absolute;border-radius:18px;border:2px dashed rgba(16,185,129,.55);width:90px;height:90px; z-index:3; pointer-events:none;}
+  .hidden{display:none}
+  .quiz .q{font-weight:700;margin:14px 0 6px}
+  .quiz .opt{display:block;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;margin:6px 0;cursor:pointer}
+  .quiz .opt:hover{background:#eef2ff}
+  .center{display:grid;place-items:center}
+  .badge{display:inline-flex;align-items:center;gap:8px;background:#10b98114;color:#065f46;border:1px solid #10b98155;border-radius:999px;padding:6px 12px;font-weight:800}
+  #confettiCanvas{position:absolute;inset:0;pointer-events:none}
+  .bigTitle{font-size:28px}
+  @media (min-width:640px){.bigTitle{font-size:36px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="card">
+    <canvas id="confettiCanvas" class="hidden"></canvas>
+
+    <h1 class="title">🐾 Bakalım ne kadar veterinersin? 🩺</h1>
+    <div class="subtitle">Kedi · Kalp Dinleme · 20 Soru</div>
+
+    <div class="hud">
+      <button id="reset" class="btn">Baştan Başlat</button>
+      <div id="status" class="subtitle" style="font-size:16px;margin:0;">Durum: Bekleniyor</div>
+    </div>
+
+    <div id="practice" class="stage">
+      <img id="catimg" class="cat" alt="Kedi" src="Gato morado de dibujos animados sentado en el suelo con ojos grandes ai generativo _ Imagen Premium generada con IA.jpg"/>
+      <div id="hotspot" class="hotspot"></div>
+      <div id="ring" class="ring"></div>
+      <div id="tool" class="drag" style="left:120px; top:360px;">🩺</div>
+    </div>
+
+    <div id="quiz" class="hidden">
+      <h2 class="title" style="font-size:22px">Mini Quiz (20 Soru)</h2>
+      <div id="quizContainer" class="quiz"></div>
+      <div class="hud" style="margin-top:16px">
+        <button id="finish" class="btn">Bitir</button>
+        <div id="score" class="subtitle" style="font-size:16px;margin:0;"></div>
+      </div>
+    </div>
+
+    <div id="done" class="hidden center" style="height:320px">
+      <div class="center" style="text-align:center">
+        <h2 class="title bigTitle" id="doneTitle">Ders Tamamlandı 🎉</h2>
+        <div id="final" class="subtitle" style="font-size:18px">Skor: 0/20</div>
+        <div id="badgeWrap" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const tool = document.getElementById('tool');
+  const hotspot = document.getElementById('hotspot');
+  const ring = document.getElementById('ring');
+  const practice = document.getElementById('practice');
+  const quiz = document.getElementById('quiz');
+  const done = document.getElementById('done');
+  const status = document.getElementById('status');
+  const finish = document.getElementById('finish');
+  const scoreBox = document.getElementById('score');
+  const final = document.getElementById('final');
+  const resetBtn = document.getElementById('reset');
+  const quizContainer = document.getElementById('quizContainer');
+  const doneTitle = document.getElementById('doneTitle');
+  const badgeWrap = document.getElementById('badgeWrap');
+  const catimg = document.getElementById('catimg');
+
+  // Confetti
+  const confettiCanvas = document.getElementById('confettiCanvas');
+  const ctx = confettiCanvas.getContext('2d');
+  let confettiRunning = false, confettiParticles = [], confettiRAF = null, confettiTimer = null;
+
+  function resizeCanvas(){
+    const card = confettiCanvas.parentElement;
+    confettiCanvas.width = card.clientWidth;
+    confettiCanvas.height = card.clientHeight;
+  }
+  window.addEventListener('resize', ()=>{ if(!confettiCanvas.classList.contains('hidden')) resizeCanvas(); });
+
+  function launchConfetti(durationMs=4500, count=240){
+    if(confettiRunning) stopConfetti();
+    confettiCanvas.classList.remove('hidden');
+    resizeCanvas();
+    confettiParticles = [];
+    const colors = ['#ef4444','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ec4899','#f43f5e'];
+    for(let i=0;i<count;i++){
+      confettiParticles.push({
+        x: Math.random()*confettiCanvas.width,
+        y: -20 - Math.random()*confettiCanvas.height*0.5,
+        vx: (Math.random()*2-1)*2.4,
+        vy: 2 + Math.random()*3,
+        size: 6 + Math.random()*6,
+        rot: Math.random()*Math.PI*2,
+        vr: (Math.random()*2-1)*0.2,
+        color: colors[i % colors.length],
+        life: durationMs,
+        shape: Math.random()<0.6 ? 'rect' : 'circle'
+      });
+    }
+    confettiRunning = true;
+    const start = performance.now();
+    function tick(now){
+      const dt = now - (tick.last || now);
+      tick.last = now;
+      ctx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+      confettiParticles.forEach(p=>{
+        p.vy += 0.012*dt;
+        p.x += p.vx * (dt/16);
+        p.y += p.vy * (dt/16);
+        p.rot += p.vr * (dt/16);
+        p.life -= dt;
+        ctx.save();
+        ctx.translate(p.x,p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        if(p.shape==='rect'){ ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6); }
+        else { ctx.beginPath(); ctx.arc(0,0,p.size*0.4,0,Math.PI*2); ctx.fill(); }
+        ctx.restore();
+      });
+      confettiParticles = confettiParticles.filter(p=>p.life>0 && p.y < confettiCanvas.height+40);
+      if(confettiParticles.length>0 && (now-start)<(durationMs+600)){ confettiRAF = requestAnimationFrame(tick); }
+      else { stopConfetti(); }
+    }
+    confettiRAF = requestAnimationFrame(tick);
+    confettiTimer = setTimeout(stopConfetti, durationMs+1200);
+  }
+
+  function stopConfetti(){
+    if(confettiRAF) cancelAnimationFrame(confettiRAF);
+    if(confettiTimer) clearTimeout(confettiTimer);
+    confettiRAF = null; confettiTimer = null;
+    confettiRunning = false;
+    ctx.clearRect(0,0,confettiCanvas.width,confettiCanvas.height);
+    confettiCanvas.classList.add('hidden');
+  }
+
+  // Position hotspot relative to the stage (chest region of the image)
+  function positionHotspot(){
+    const rI = catimg.getBoundingClientRect();
+    const rP = practice.getBoundingClientRect();
+    const cx = (rI.left - rP.left) + rI.width * 0.60;
+    const cy = (rI.top  - rP.top)  + rI.height * 0.58;
+    hotspot.style.left = (cx - 45) + 'px';
+    hotspot.style.top  = (cy - 45) + 'px';
+  }
+  window.addEventListener('resize', positionHotspot);
+  catimg.addEventListener('load', positionHotspot);
+  setTimeout(positionHotspot, 80);
+
+  let holding = false, holdStart = 0, rafId = null;
+  let dragging = false;
+
+  function setToolPos(xRel,yRel){
+    tool.style.left = xRel + 'px';
+    tool.style.top  = yRel + 'px';
+    const rect = tool.getBoundingClientRect();
+    ring.style.left = (rect.left + rect.width/2 - 38) + 'px';
+    ring.style.top  = (rect.top  - 80) + 'px';
+  }
+
+  function inHotspot(){
+    const t = tool.getBoundingClientRect();
+    const h = hotspot.getBoundingClientRect();
+    const cx = t.left + t.width/2;
+    const cy = t.top + t.height/2;
+    return (cx > h.left && cx < h.right && cy > h.top && cy < h.bottom);
+  }
+
+  function loop(){
+    if(!holding){ cancelAnimationFrame(rafId); rafId = null; return; }
+    const need = 2000;
+    const dt = Date.now() - holdStart;
+    const p = Math.min(100, Math.floor((dt/need)*100));
+    ring.classList.add('progress');
+    ring.style.setProperty('--p', p + '%');
+    if(p>=100){
+      completePractice();
+      holding = false;
+      return;
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function beginHold(){
+    if(holding) return;
+    holding = true;
+    holdStart = Date.now();
+    loop();
+  }
+  function endHold(){
+    holding = false;
+    ring.classList.remove('progress');
+    ring.style.setProperty('--p', '0%');
+  }
+
+  // Drag with mouse/touch — compute coordinates relative to the stage
+  tool.addEventListener('pointerdown', e=>{
+    dragging = true;
+    tool.setPointerCapture(e.pointerId);
+    status.textContent = 'Durum: Sürükleniyor';
+  });
+  window.addEventListener('pointermove', e=>{
+    if(!dragging) return;
+    const r = practice.getBoundingClientRect();
+    const xRel = Math.max(10, Math.min(r.width-10, e.clientX - r.left));
+    const yRel = Math.max(10, Math.min(r.height-10, e.clientY - r.top));
+    setToolPos(xRel, yRel);
+    if(inHotspot()){ status.textContent = 'Durum: Doğru bölge 👍'; beginHold(); }
+    else { status.textContent = 'Durum: Yanlış bölge'; endHold(); }
+  });
+  window.addEventListener('pointerup', ()=>{ dragging=false; endHold(); status.textContent='Durum: Bekleniyor'; });
+
+  function completePractice(){
+    practice.classList.add('hidden');
+    renderQuiz();
+    quiz.classList.remove('hidden');
+    status.textContent = 'Durum: Pratik tamam ✔';
+  }
+
+  // ----- QUIZ DATA (20) -----
+  const questions = [
+    {q:'Ani letarji, soluk diş etleri ve taşikardi. İlk olası durum?', opts:['Anemi','Hipertiroidi','Panlökopeni'], ans:0},
+    {q:'Feline panlökopeni hangi hücreleri hedef alır?', opts:['Sinir hüc.','Kas hüc.','Hızla bölünen hüc.'], ans:2},
+    {q:'Kedilerde en sık görülen kardiyomiyopati?', opts:['Dilate KM','Hipertrofik KM','Restriktif KM'], ans:1},
+    {q:'HKM tanısında en değerli yöntem?', opts:['Ekokardiyografi','Röntgen','EKG'], ans:0},
+    {q:'FeLV bulaş yolu?', opts:['Solunum aerosolleri','Saliva/kan','Transplasental tek yol'], ans:1},
+    {q:'İkterusta öncelikli etkilenen sistem?', opts:['Karaciğer-safra','Sinir','Üriner'], ans:0},
+    {q:'FIV’da sık bulgu?', opts:['Lenfadenopati ve ateş','Hipoglisemi','Miydriyazis'], ans:0},
+    {q:'Şiddetli ağız kokusu ve diş eti çekilmesi?', opts:['FIP','Gingivostomatitis','Otitis externa'], ans:1},
+    {q:'Hipertiroidi için tipik biyokimya?', opts:['↑T4','↓ALT','↓ALP'], ans:0},
+    {q:'HCM’de oskültasyonda sık bulgu?', opts:['Sistolik üfürüm','Diastolik click','S3 sesi'], ans:0},
+    {q:'Astım kedide akut dispnede ilk basamak?', opts:['Oksijen + bronkodilatör','Sıvı yükleme','Antibiyotik IM'], ans:0},
+    {q:'Kedide sistit nükslerinde profilaksi?', opts:['Su alımını artırma','Rastgele steroid','Yüksek Mg diyet'], ans:0},
+    {q:'FIP’in ıslak formunda tipik sıvı?', opts:['Transüda (düşük protein)','Modifiye transüda, viskoz','Pürülan'], ans:1},
+    {q:'Diyabetik kedide ilk tedavi yaklaşımı?', opts:['Oral sülfonilüre','Uzun etkili insülin + diyet','Sadece diyet'], ans:1},
+    {q:'Ektoparazit kaynaklı yoğun kaşıntı?', opts:['Sarcoptes (nadir kedi)','Notoedres/cheyletiella/pire','Demodex gatoi asla kaşıntı yapmaz'], ans:1},
+    {q:'Hipotermi kedide EKG değişikliği?', opts:['Osborn (J) dalgası','QT kısalması','P dalgası kaybı özgül'], ans:0},
+    {q:'Kalp yetersizliğinde ev izlem önerisi?', opts:['Solunum sayımı','Obezite skoru atla','Egzersizi artır'], ans:0},
+    {q:'Kronik böbrek hastalığında diyet?', opts:['Yüksek fosfor','Düşük fosfor/protein dengeli','Yüksek sodyum'], ans:1},
+    {q:'Hematokezya + tenesmus?', opts:['Kalın bağırsak kökenli','İnce bağırsak kökenli','Üriner'], ans:0},
+    {q:'Kedide sistemik hipertansiyon tedavisinde ilk seçenek?', opts:['Amlodipin','Enalapril','Furosemid'], ans:0}
+  ];
+
+  function renderQuiz(){
+    quizContainer.innerHTML='';
+    questions.forEach((item, idx)=>{
+      const block=document.createElement('div');
+      block.className='qblock';
+      const q=document.createElement('div');
+      q.className='q';
+      q.textContent=(idx+1)+') '+item.q;
+      block.appendChild(q);
+      item.opts.forEach((opt,optIdx)=>{
+        const label=document.createElement('label');
+        label.className='opt';
+        const input=document.createElement('input');
+        input.type='radio';
+        input.name='q'+(idx+1);
+        input.dataset.index=idx;
+        input.dataset.opt=optIdx;
+        label.appendChild(input);
+        label.append(' '+opt);
+        block.appendChild(label);
+      });
+      quizContainer.appendChild(block);
+    });
+  }
+
+  finish.addEventListener('click', ()=>{
+    let score=0;
+    for(let i=0;i<questions.length;i++){
+      const checked=[...document.querySelectorAll('input[name="q'+(i+1)+'"]')].find(x=>x.checked);
+      if(checked){
+        const chosen=parseInt(checked.dataset.opt,10);
+        if(chosen===questions[i].ans) score++;
+      }
+    }
+    scoreBox.textContent='Skor: '+score+'/20';
+    setTimeout(()=>{
+      quiz.classList.add('hidden');
+      done.classList.remove('hidden');
+      final.textContent='Skor: '+score+'/20';
+      status.textContent='Durum: Tamamlandı 🎉';
+      badgeWrap.innerHTML='';
+      if(score===20){
+        doneTitle.textContent='VETERİNER DOKTORUM ❤️';
+        const badge=document.createElement('div');
+        badge.className='badge';
+        badge.innerHTML='Tam puan! <span>❤️</span>';
+        badgeWrap.appendChild(badge);
+        launchConfetti();
+      }else{
+        doneTitle.textContent='köyüne dön okumayı bırak';
+        stopConfetti();
+      }
+    },500);
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    done.classList.add('hidden');
+    quiz.classList.add('hidden');
+    practice.classList.remove('hidden');
+    ring.classList.remove('progress');
+    ring.style.setProperty('--p','0%');
+    status.textContent='Durum: Bekleniyor';
+    scoreBox.textContent='';
+    badgeWrap.innerHTML='';
+    doneTitle.textContent='Ders Tamamlandı 🎉';
+    stopConfetti();
+    positionHotspot();
+  });
+
+  // Init
+  positionHotspot();
+})();
+</script>
+</body>
+</html>
